@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>City Parking 3D</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#101923;color:#fff;font-family:Arial,sans-serif}
+main{max-width:1000px;margin:auto;padding:12px}h1{text-align:center;margin:5px 0 10px;font-size:clamp(22px,4vw,32px)}
+.hud{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:9px}.pill{background:#1b3042;border:1px solid #46627a;padding:9px 13px;border-radius:10px;font-weight:bold}
+#view{height:min(65vh,620px);min-height:360px;border:2px solid #49677f;border-radius:13px;overflow:hidden}
+#view canvas{display:block;width:100%;height:100%}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px}
+.controls{display:flex;gap:8px;flex-wrap:wrap}button{background:#ffb703;border:0;border-radius:10px;padding:12px 16px;font-weight:bold;font-size:16px;cursor:pointer}
+.drive button{background:#1d3d56;color:white;border:1px solid #577f9e;min-width:64px;touch-action:none}
+.hint{color:#c2d1dc;font-size:13px;line-height:1.5;margin-top:9px}
+#modal{position:fixed;inset:0;background:#020912bb;display:grid;place-items:center;padding:18px;z-index:5}
+#box{background:#13283a;border:1px solid #64839d;border-radius:16px;padding:24px;text-align:center;max-width:420px;width:100%;box-shadow:0 20px 60px #0009}
+#box h2{margin:0 0 10px;font-size:27px}#box p{color:#c8d5df;line-height:1.5}.hide{display:none!important}
+</style></head>
+<body><main>
+<h1>🅿️ CITY PARKING 3D</h1>
+<div class="hud"><div class="pill">Уровень: <span id="level">1</span></div><div class="pill">Скорость: <span id="speed">0</span> км/ч</div><div class="pill">Задание: припаркуйся в зоне</div></div>
+<div id="view"></div>
+<div class="row">
+ <div class="controls drive">
+  <button id="left">◀</button><button id="gas">▲ Газ</button><button id="brake">▼ Тормоз</button><button id="right">▶</button>
+ </div>
+ <div class="controls"><button id="restart">↻ Заново</button><button id="next" class="hide">Следующий уровень ➜</button></div>
+</div>
+<div class="hint">Управление: W / ↑ — газ, S / ↓ — тормоз и задний ход, A / ← и D / → — поворот. Припаркуй машину внутри зелёного прямоугольника и остановись.</div>
+</main>
+<div id="modal"><div id="box"><h2 id="title">CITY PARKING 3D</h2><p id="desc">Научись парковаться! Доедь до зелёного парковочного места, не задевая другие машины и препятствия.</p><button id="start">▶ Играть</button></div></div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+const host=document.querySelector('#view'),scene=new THREE.Scene();scene.background=new THREE.Color(0x9acbe0);scene.fog=new THREE.Fog(0x9acbe0,45,120);
+const camera=new THREE.PerspectiveCamera(58,1,.1,250);const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.12;host.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xeaf7ff,0x63724d,2));const sun=new THREE.DirectionalLight(0xfff0d6,2.5);sun.position.set(-20,35,15);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);scene.add(sun);
+const mat=(c,r=.7,m=0)=>new THREE.MeshStandardMaterial({color:c,roughness:r,metalness:m});
+const asphalt=mat(0x414950,.95),white=mat(0xf4f2e8),green=new THREE.MeshBasicMaterial({color:0x20db78,transparent:true,opacity:.2,side:THREE.DoubleSide}),greenLine=new THREE.MeshBasicMaterial({color:0x20ef88});
+const floor=new THREE.Mesh(new THREE.PlaneGeometry(180,180),mat(0x66865b));floor.rotation.x=-Math.PI/2;floor.position.y=-.12;floor.receiveShadow=true;scene.add(floor);
+const lot=new THREE.Mesh(new THREE.PlaneGeometry(54,68),asphalt);lot.rotation.x=-Math.PI/2;lot.position.set(0,0,-5);lot.receiveShadow=true;scene.add(lot);
+function box(w,h,d,material,x,y,z){const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),material);o.position.set(x,y,z);o.castShadow=true;o.receiveShadow=true;scene.add(o);return o}
+for(let x=-26;x<=26;x+=13){for(let z=-32;z<=20;z+=11){const stripe=new THREE.Mesh(new THREE.PlaneGeometry(.13,9),white);stripe.rotation.x=-Math.PI/2;stripe.position.set(x,0.015,z);scene.add(stripe)}}
+for(const x of [-27,27])box(.5,.25,68,white,x,.1,-5);
+for(const z of [-39,29])box(54,.25,.5,white,0,.1,z);
+let parkX=13;const parkZ=-23;
+const park=new THREE.Mesh(new THREE.PlaneGeometry(5.6,9),green);park.rotation.x=-Math.PI/2;park.position.set(parkX,.025,parkZ);scene.add(park);
+function line(x,z,w,d){const o=new THREE.Mesh(new THREE.BoxGeometry(w,.04,d),greenLine);o.position.set(x,.06,z);scene.add(o)}
+line(parkX,parkZ-4.5,5.8,.12);line(parkX,parkZ+4.5,5.8,.12);line(parkX-2.85,parkZ,.12,9);line(parkX+2.85,parkZ,.12,9);
+// city buildings around the lot
+for(let i=0;i<14;i++){let side=i%2?1:-1,z=-36+Math.floor(i/2)*11;let h=8+Math.random()*13;let b=box(7,h,7,mat([0x9aa7ac,0x7d8994,0xb7ad9c,0x667c87][i%4]),side*(36+Math.random()*7),h/2,z);const win=mat(0xa9d8e5,.3,.15);for(let y=2;y<h-1;y+=3)for(let xx=-2;xx<=2;xx+=2){const q=new THREE.Mesh(new THREE.PlaneGeometry(1,1.3),win);q.position.set(b.position.x+xx,y,z-3.53);scene.add(q)}}
+function car(color=0xe9a51a){
+ const root=new THREE.Group(),paint=new THREE.MeshPhysicalMaterial({color,metalness:.65,roughness:.23,clearcoat:1}),glass=mat(0x183344,.18,.35),rubber=mat(0x111419,.8),chrome=mat(0xb9c5cc,.25,.8);
+ const body=new THREE.Mesh(new THREE.BoxGeometry(2.05,.65,4.15),paint);body.position.y=.75;body.castShadow=true;root.add(body);
+ const hood=new THREE.Mesh(new THREE.BoxGeometry(1.9,.2,1.05),paint);hood.position.set(0,1.08,-1.42);root.add(hood);
+ const cabin=new THREE.Mesh(new THREE.BoxGeometry(1.55,.72,1.9),glass);cabin.position.set(0,1.36,.1);root.add(cabin);
+ const roof=new THREE.Mesh(new THREE.BoxGeometry(1.35,.12,1.5),paint);roof.position.set(0,1.76,.1);root.add(roof);
+ for(const x of [-.8,.8])for(const z of [-1.4,1.4]){let wh=new THREE.Mesh(new THREE.CylinderGeometry(.42,.42,.3,24),rubber);wh.rotation.z=Math.PI/2;wh.position.set(x,.45,z);root.add(wh);let hub=new THREE.Mesh(new THREE.CylinderGeometry(.2,.2,.31,20),chrome);hub.rotation.z=Math.PI/2;hub.position.set(x,.45,z);root.add(hub)}
+ for(const x of [-.68,.68]){let l=new THREE.Mesh(new THREE.BoxGeometry(.42,.15,.05),new THREE.MeshBasicMaterial({color:0xfff2c2}));l.position.set(x,.88,-2.1);root.add(l)}
+ return root;
+}
+const player=car();player.position.set(-13,0,18);scene.add(player);
+const parked=[];
+function makeParked(x,z,color){const p=car(color);p.scale.setScalar(.92);p.position.set(x,0,z);scene.add(p);parked.push(p)}
+function resetObstacles(){parked.forEach(p=>scene.remove(p));parked.length=0;makeParked(-13,-4,0x2879cf);makeParked(0,-4,0xd84b42);makeParked(0,-23,0xeeeeee);makeParked(-13,-23,0x333d4c)}
+resetObstacles();
+const keys={};addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;if(e.key.startsWith('Arrow'))e.preventDefault()});addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+function hold(id,k){let b=document.getElementById(id);b.onpointerdown=e=>{e.preventDefault();keys[k]=true};for(let ev of ['pointerup','pointerleave','pointercancel'])b.addEventListener(ev,()=>keys[k]=false)}
+hold('left','arrowleft');hold('right','arrowright');hold('gas','arrowup');hold('brake','arrowdown');
+let level=1,speed=0,vel=0,heading=0,active=false,won=false,crashed=false;
+const modal=document.querySelector('#modal'),title=document.querySelector('#title'),desc=document.querySelector('#desc'),startBtn=document.querySelector('#start'),nextBtn=document.querySelector('#next');
+function reset(){player.position.set(-13,0,18);heading=0;speed=0;vel=0;won=false;crashed=false;active=true;modal.classList.add('hide');nextBtn.classList.add('hide')}
+function message(t,d,button='Играть снова'){active=false;modal.classList.remove('hide');title.textContent=t;desc.textContent=d;startBtn.textContent=button}
+function checkCollision(){
+ const x=player.position.x,z=player.position.z;
+ if(Math.abs(x)>25||z>27||z< -37){return true}
+ for(const p of parked){if(Math.abs(x-p.position.x)<2.1&&Math.abs(z-p.position.z)<3.3)return true}
+ return false;
+}
+function resize(){const w=host.clientWidth,h=host.clientHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()}new ResizeObserver(resize).observe(host);resize();
+function animate(){
+ requestAnimationFrame(animate);
+ if(active){
+  const dt=1/60,gas=keys.w||keys.arrowup,brake=keys.s||keys.arrowdown,turn=(keys.a||keys.arrowleft?-1:0)+(keys.d||keys.arrowright?1:0);
+  if(gas)vel=Math.min(vel+13*dt,13);else if(brake)vel=Math.max(vel-18*dt,-5);else vel*=.985;
+  if(Math.abs(vel)>.15)heading+=turn*dt*(.8+Math.abs(vel)*.09)*Math.sign(vel);
+  player.rotation.y=heading;
+  player.position.x+=Math.sin(heading)*vel*dt;player.position.z+=Math.cos(heading)*vel*dt;
+  if(checkCollision()){vel=0;message('СТОЛКНОВЕНИЕ','Попробуй ещё раз. Следи за другими машинами и границами парковки.','Повторить')}
+  const dx=player.position.x-parkX,dz=player.position.z-parkZ;
+  const aligned=Math.abs(dx)<1.35&&Math.abs(dz)<2.7&&Math.abs(vel)<.45&&Math.abs(heading)<.22;
+  if(aligned&&!won){won=true;active=false;modal.classList.remove('hide');title.textContent='ОТЛИЧНАЯ ПАРКОВКА!';desc.textContent='Ты успешно припарковал машину. Переходи на следующий уровень!';startBtn.textContent='Играть ещё';nextBtn.classList.remove('hide')}
+  document.querySelector('#speed').textContent=Math.round(Math.abs(vel)*7);
+ }
+ const camTarget=new THREE.Vector3(player.position.x+Math.sin(heading)*8,5.4,player.position.z+Math.cos(heading)*8);
+ camera.position.lerp(camTarget,.09);
+ const look=new THREE.Vector3(player.position.x,1,player.position.z-5);camera.lookAt(look);
+ renderer.render(scene,camera);
+}
+startBtn.onclick=()=>{reset();document.querySelector('#level').textContent=level};
+document.querySelector('#restart').onclick=()=>reset();
+nextBtn.onclick=()=>{level++;document.querySelector('#level').textContent=level;parkX=13;reset();message('УРОВЕНЬ '+level,'Новый уровень! Припаркуйся в зелёной зоне.','Начать')};
+animate();
+</script>
+</body></html>
