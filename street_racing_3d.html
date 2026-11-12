@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Street Racing 3D</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#101820;color:#fff;font-family:Arial,sans-serif;display:grid;place-items:center;min-height:100vh}
+.wrap{width:min(960px,100vw);padding:14px;text-align:center}
+h1{margin:4px 0 10px;font-size:clamp(22px,4vw,34px)}
+.hud{display:flex;justify-content:space-between;gap:10px;margin:8px auto;max-width:900px;font-weight:bold}
+canvas{display:block;width:100%;height:auto;aspect-ratio:16/9;border:3px solid #52616b;border-radius:12px;background:#79c7ef;box-shadow:0 12px 35px #0008}
+.controls{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:12px}
+button{background:#ffb703;border:0;border-radius:10px;padding:12px 20px;font-size:17px;font-weight:bold;cursor:pointer}
+.hint{color:#c9d4dc;font-size:14px;margin:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>🏁 STREET RACING 3D</h1>
+<div class="hud"><span>Счёт: <b id="score">0</b></span><span>Скорость: <b id="speed">0</b> км/ч</span><span>Рекорд: <b id="best">0</b></span></div>
+<canvas id="game" width="960" height="540" aria-label="Гоночная игра"></canvas>
+<div class="controls">
+<button id="left">⬅ Влево</button><button id="start">▶ Старт / заново</button><button id="right">Вправо ➡</button>
+</div>
+<div class="hint">Управление: ← → или A / D. Объезжай другие машины. На телефоне используй кнопки.</div>
+</div>
+<script>
+const c=document.getElementById('game'),ctx=c.getContext('2d');
+const scoreEl=document.getElementById('score'),speedEl=document.getElementById('speed'),bestEl=document.getElementById('best');
+let player=0, obstacles=[],score=0,speed=0,playing=false,over=false,last=0,spawn=0;
+let best=Number(localStorage.getItem('streetBest')||0);bestEl.textContent=best;
+const keys={};
+addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight',' '].includes(e.key))e.preventDefault();keys[e.key.toLowerCase()]=true;if(e.key==='Enter'&&!playing)start()});
+addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+function roadPoint(y){const t=(y-100)/440;return {center:480,half:100+250*t};}
+function car(x,y,w,h,color,enemy=false){
+ ctx.save();ctx.translate(x,y);
+ ctx.fillStyle='#101820';ctx.fillRect(-w*.43,-h*.42,w*.86,h*.84);
+ ctx.fillStyle=color;ctx.beginPath();ctx.roundRect(-w/2,-h/2,w,h,9);ctx.fill();
+ ctx.fillStyle=enemy?'#bde0fe':'#a8dadc';ctx.beginPath();ctx.roundRect(-w*.32,-h*.27,w*.64,h*.34,6);ctx.fill();
+ ctx.fillStyle='#fff3b0';ctx.fillRect(-w*.39,-h*.48,w*.2,5);ctx.fillRect(w*.19,-h*.48,w*.2,5);
+ ctx.fillStyle='#e63946';ctx.fillRect(-w*.38,h*.36,w*.18,5);ctx.fillRect(w*.2,h*.36,w*.18,5);
+ ctx.restore();
+}
+function draw(){
+ const g=ctx.createLinearGradient(0,0,0,540);g.addColorStop(0,'#78c9ef');g.addColorStop(.55,'#d5f0d1');g.addColorStop(.56,'#37834b');g.addColorStop(1,'#195c36');ctx.fillStyle=g;ctx.fillRect(0,0,960,540);
+ // distant skyline and trees
+ for(let i=0;i<12;i++){let x=i*90+(i%2)*20;ctx.fillStyle=i%2?'#668b78':'#718b91';ctx.fillRect(x,130-(i%3)*18,45,90+(i%3)*18);ctx.fillStyle='#d8e9e7';for(let j=0;j<3;j++)ctx.fillRect(x+8+j*12,142,5,8);}
+ // road perspective
+ ctx.fillStyle='#555b62';ctx.beginPath();ctx.moveTo(380,100);ctx.lineTo(580,100);ctx.lineTo(890,540);ctx.lineTo(70,540);ctx.closePath();ctx.fill();
+ ctx.strokeStyle='#fff';ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(380,100);ctx.lineTo(70,540);ctx.moveTo(580,100);ctx.lineTo(890,540);ctx.stroke();
+ // dashed center lines
+ let offset=(score*5)%70;
+ for(let y=110;y<560;y+=70){let yy=y+offset; if(yy>540)continue;let p=roadPoint(yy),w=5+(yy/540)*5;ctx.fillStyle='#f8f9fa';ctx.fillRect(480-w/2,yy,w,35*(yy/540));}
+ // roadside trees
+ for(let i=0;i<8;i++){let y=125+i*62;let p=roadPoint(y);for(let side of [-1,1]){let x=480+side*(p.half+35+y*.08);ctx.fillStyle='#754c24';ctx.fillRect(x-5,y,10,27);ctx.fillStyle='#237a42';ctx.beginPath();ctx.arc(x,y,17+y*.025,0,Math.PI*2);ctx.fill();}}
+ obstacles.forEach(o=>car(o.x,o.y,48+o.y*.025,76+o.y*.02,o.color,true));
+ car(480+player*205,430,58,100,'#ffb703');
+ if(!playing){ctx.fillStyle='#06131dcc';ctx.fillRect(210,190,540,150);ctx.textAlign='center';ctx.fillStyle='white';ctx.font='bold 38px Arial';ctx.fillText(over?'ГОНКА ОКОНЧЕНА':'ГОТОВ К ГОНКЕ?',480,245);ctx.font='22px Arial';ctx.fillText(over?'Нажми «Старт / заново»':'Нажми «Старт / заново», чтобы начать',480,292);}
+}
+function start(){player=0;obstacles=[];score=0;speed=0;spawn=0;playing=true;over=false;last=performance.now();requestAnimationFrame(loop)}
+function loop(t){if(!playing)return;let dt=Math.min((t-last)/16.67,2);last=t;speed=Math.min(180,80+score*.12);score+=Math.round(dt);scoreEl.textContent=score;speedEl.textContent=Math.round(speed);
+ if(keys.arrowleft||keys.a)player=Math.max(-1,player-.07*dt);if(keys.arrowright||keys.d)player=Math.min(1,player+.07*dt);
+ spawn+=dt;if(spawn>Math.max(25,72-score*.025)){spawn=0;let lane=[-.72,0,.72][Math.floor(Math.random()*3)];obstacles.push({x:480+lane*205,y:100,color:['#e63946','#3a86ff','#8338ec','#f1faee'][Math.floor(Math.random()*4)]});}
+ obstacles.forEach(o=>o.y+=(3.2+speed/90)*dt);obstacles=obstacles.filter(o=>o.y<620);
+ for(const o of obstacles){if(o.y>350&&o.y<500&&Math.abs(o.x-(480+player*205))<48){playing=false;over=true;if(score>best){best=score;localStorage.setItem('streetBest',best);bestEl.textContent=best;}draw();return;}}
+ draw();requestAnimationFrame(loop)}
+document.getElementById('start').onclick=start;
+function hold(id,key){let b=document.getElementById(id);b.onpointerdown=e=>{e.preventDefault();keys[key]=true};b.onpointerup=b.onpointerleave=b.onpointercancel=()=>keys[key]=false;}
+hold('left','arrowleft');hold('right','arrowright');
+draw();
+</script>
+</body></html>
